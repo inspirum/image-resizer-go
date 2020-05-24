@@ -1,29 +1,59 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
-	"github.com/discordapp/lilliput"
+	_ "golang.org/x/image/bmp"
+	_ "golang.org/x/image/tiff"
+	_ "golang.org/x/image/webp"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
+	"io"
+	"io/ioutil"
+	"math"
+	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 )
 
-var EncodeOptions = map[string]map[int]int{
-	".jpeg": map[int]int{lilliput.JpegQuality: 85},
-	".png":  map[int]int{lilliput.PngCompression: 7},
-	".webp": map[int]int{lilliput.WebpQuality: 85},
-}
-
 type Template struct {
-	width   float64
-	height  float64
-	ratio   float64
-	crop    bool
-	upscale bool
+	width     float64
+	height    float64
+	ratio     float64
+	crop      bool
+	upscale   bool
+	inputExt  string
+	outputExt string
 }
 
-func isOriginalTemplate(template string) bool {
-	return template == "original"
+func validateFilename(ext string) error {
+	supportedFormats := [...]string{
+		".jpg",
+		".jpeg",
+		".png",
+		".gif",
+		".webp",
+		".svg",
+		".bmp",
+		".tiff",
+		".pdf",
+	}
+
+	for _, f := range supportedFormats {
+		if f == ext {
+			return nil
+		}
+	}
+
+	return errors.New("not supported file format")
+}
+
+func isOriginalTemplate(template string, ext string) bool {
+	return template == "original" || ext == ".svg" || ext == ".pdf"
 }
 
 func validateTemplate(template string) error {
@@ -34,7 +64,7 @@ func validateTemplate(template string) error {
 	return nil
 }
 
-func NewTemplate(template string) (*Template, error) {
+func NewTemplate(template string) *Template {
 	width := 0.0
 	height := 0.0
 	ratio := 0.0
@@ -49,10 +79,10 @@ func NewTemplate(template string) (*Template, error) {
 			height, _ = strconv.ParseFloat(part[1:], 64)
 		} else if strings.Contains(part, "x") {
 			sides := strings.SplitN(part, "x", 2)
-			tempWidth, _ := strconv.ParseFloat(sides[0], 64)
-			tempHeight, _ := strconv.ParseFloat(sides[1], 64)
-			if tempHeight > 0 {
-				ratio = tempWidth / tempHeight
+			ratioWidth, _ := strconv.ParseFloat(sides[0], 64)
+			ratioHeight, _ := strconv.ParseFloat(sides[1], 64)
+			if ratioHeight > 0 {
+				ratio = ratioWidth / ratioHeight
 			}
 		} else if part == "crop" {
 			crop = true
@@ -61,19 +91,10 @@ func NewTemplate(template string) (*Template, error) {
 		}
 	}
 
-	return &Template{
-		width,
-		height,
-		ratio,
-		crop,
-		upscale,
-	}, nil
+	return &Template{width, height, ratio, crop, upscale, "", ""}
 }
 
 func (t *Template) getFinal(originalWidth float64, originalHeight float64) (int, int) {
-
-	fmt.Printf("Template config w: %f, h: %f, ratio: %f, crop: %v, upscale: %v\n", t.width, t.height, t.ratio, t.crop, t.upscale)
-
 	outputWidth := originalWidth
 	outputHeight := originalHeight
 	originalRatio := originalWidth / originalHeight
@@ -103,60 +124,94 @@ func (t *Template) getFinal(originalWidth float64, originalHeight float64) (int,
 		outputHeight = t.height
 	}
 
-	return int(outputWidth), int(outputHeight)
+	if t.crop && !t.upscale {
+		upscaleWidth := originalWidth / outputWidth
+		upscaleHeight := originalHeight / outputHeight
+		outputRatio := outputWidth / outputHeight
+
+		if upscaleWidth < 1 && upscaleWidth < upscaleHeight {
+			outputWidth = originalWidth
+			outputHeight = originalWidth / outputRatio
+		} else if upscaleHeight < 1 && upscaleHeight < upscaleWidth {
+			outputWidth = originalHeight * outputRatio
+			outputHeight = originalHeight
+		}
+	}
+
+	return int(math.Round(outputWidth)), int(math.Round(outputHeight))
 }
 
-func resizeImage(content []byte, template *Template) ([]byte, error) {
-
-	decoder, err := lilliput.NewDecoder(content)
+func resizeImage(content []byte, template *Template) (io.ReadSeeker, error) {
+	c, _, err := image.DecodeConfig(bytes.NewReader(content))
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Error decoding image: %s", err))
-	}
-	defer decoder.Close()
-
-	header, err := decoder.Header()
-	if err != nil {
-		return nil, errors.New(fmt.Sprintf("error reading image header, %s", err))
+		return nil, err
 	}
 
-	// get ready to resize image, using 8192x8192 maximum resize buffer size
-	ops := lilliput.NewImageOps(8192)
-	defer ops.Close()
+	finalWidth, finalHeight := template.getFinal(float64(c.Width), float64(c.Height))
 
-	// create a buffer to store the output image, 50MB in this case
-	resizedImageContent := make([]byte, 50*1024*1024)
+	inputFilename, err := createTempFileFromContent(content, template.inputExt)
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(inputFilename.Name())
 
-	// use user supplied filename to guess output type if provided
-	// otherwise don't transcode (use existing type)
-	outputType := "." + strings.ToLower(decoder.Description())
+	outputFilename, err := createTempFileFromContent([]byte(""), template.outputExt)
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(outputFilename.Name())
 
-	finalWidth, finalHeight := template.getFinal(float64(header.Width()), float64(header.Height()))
+	resizeGeometryArg := "%dx%d"
+	backgroundArg := "none"
+	gravityArg := "center"
+	extentArg := "%dx%d"
 
-	fmt.Printf("Resizing image to %dx%d\n", finalWidth, finalHeight)
+	if template.outputExt == ".jpg" || template.outputExt == ".jpeg" {
+		backgroundArg = "white"
+	}
 
-	resizeMethod := lilliput.ImageOpsFit
 	if template.crop {
-		resizeMethod = lilliput.ImageOpsResize
+		resizeGeometryArg = "%dx%d^"
 	}
 
-	if finalWidth == header.Width() && finalHeight == header.Height() {
-		resizeMethod = lilliput.ImageOpsNoResize
+	args := []string{
+		inputFilename.Name(),
+		"-resize", fmt.Sprintf(resizeGeometryArg, finalWidth, finalHeight),
+		"-background", backgroundArg,
+		"-gravity", gravityArg,
+		"-extent", fmt.Sprintf(extentArg, finalWidth, finalHeight),
+		outputFilename.Name(),
 	}
 
-	opts := &lilliput.ImageOptions{
-		FileType:             outputType,
-		Width:                finalWidth,
-		Height:               finalHeight,
-		ResizeMethod:         resizeMethod,
-		NormalizeOrientation: true,
-		EncodeOptions:        EncodeOptions[outputType],
-	}
+	cmd := exec.Command("/usr/local/bin/convert", args...)
 
-	// resize and transcode image
-	resizedImageContent, err = ops.Transform(decoder, opts, resizedImageContent)
+	err = cmd.Run()
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("error transforming image, %s\n", err))
+		return nil, err
 	}
 
-	return resizedImageContent, nil
+	f, err := os.Open(outputFilename.Name())
+	if err != nil {
+		return nil, err
+	}
+
+	return f, nil
+}
+
+func createTempFileFromContent(content []byte, ext string) (*os.File, error) {
+	f, err := ioutil.TempFile("", "_resized_*"+ext)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := f.Write(content); err != nil {
+		return nil, err
+	}
+
+	if err := f.Close(); err != nil {
+		return nil, err
+	}
+
+	return f, nil
 }

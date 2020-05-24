@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -41,48 +42,49 @@ func main() {
 
 	s.router.GET("/image/:template/*filepath", s.imageResizeHandler)
 
-	fmt.Print("Listening on http://localhost:3000/\n")
 	log.Fatal(http.ListenAndServe(":3000", routerMux))
 }
 
 func (s *server) imageResizeHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	// get parameters
 	template := p.ByName("template")
 	filename := p.ByName("filepath")
 
-	fmt.Printf("\n == REQ: %s == \n", template+filename)
-
 	fileReader, modTime, err := s.getResizedImageContent(template + filename)
 
-	// no error - file served
 	if err == nil {
-		buildResponse(w, r, fileReader, *modTime)
+		buildResponse(w, r, filename, fileReader, *modTime)
 		return
 	}
 
-	fileContent, modTime, err := s.getOriginalImageContent(filename, r)
+	originalFilename := replaceImagePathExt(filename, r)
+	fileContent, modTime, err := s.getOriginalImageContent(originalFilename)
 
 	if err != nil {
-		buildError(w, fmt.Sprintf("Not found: %s", err), http.StatusNotFound)
+		buildError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
 	}
 
-	if isOriginalTemplate(template) {
-		buildResponse(w, r, bytes.NewReader(fileContent), *modTime)
+	originalExt := strings.ToLower(filepath.Ext(originalFilename))
+	resizedExt := strings.ToLower(filepath.Ext(filename))
+
+	if err := validateFilename(originalExt); err != nil {
+		buildError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if isOriginalTemplate(template, originalExt) {
+		buildResponse(w, r, filename, bytes.NewReader(fileContent), *modTime)
 		return
 	}
 
 	if err := validateTemplate(template); err != nil {
-		buildError(w, err.Error(), http.StatusInternalServerError)
+		buildError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	templateConfig, err := NewTemplate(template)
-
-	if err != nil {
-		buildError(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	templateConfig := NewTemplate(template)
+	templateConfig.inputExt = originalExt
+	templateConfig.outputExt = resizedExt
 
 	resizedFileContent, err := resizeImage(fileContent, templateConfig)
 
@@ -91,14 +93,15 @@ func (s *server) imageResizeHandler(w http.ResponseWriter, r *http.Request, p ht
 		return
 	}
 
-	err = s.writeFile(template+filename, resizedFileContent)
+	content, _ := ioutil.ReadAll(resizedFileContent)
+	err = s.writeFile(template+filename, content)
 
 	if err != nil {
 		buildError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	buildResponse(w, r, bytes.NewReader(resizedFileContent), time.Now())
+	buildResponse(w, r, filename, resizedFileContent, time.Now())
 }
 
 func (s *server) getLocalResizedPath(path string) string {
@@ -110,12 +113,8 @@ func (s *server) getCloudResizedPath(path string) string {
 }
 
 func (s *server) getResizedImageContent(path string) (io.ReadSeeker, *time.Time, error) {
-	fmt.Printf("Try to get local resized file %s\n", s.getLocalResizedPath(path))
-
-	// get file from local filesystem
 	f, err := os.Open(s.getLocalResizedPath(path))
 	if err == nil {
-
 		d, err := f.Stat()
 		if err != nil {
 			return nil, nil, err
@@ -126,9 +125,6 @@ func (s *server) getResizedImageContent(path string) (io.ReadSeeker, *time.Time,
 		return f, &modTime, nil
 	}
 
-	fmt.Printf("Try to get cloud resized file S3://%s\n", s.getCloudResizedPath(path))
-
-	// get file from S3 filesystem
 	b, t, err := s.s3.GetContentWithModTime(s.getCloudResizedPath(path))
 
 	if err == nil {
@@ -138,15 +134,12 @@ func (s *server) getResizedImageContent(path string) (io.ReadSeeker, *time.Time,
 	return nil, nil, err
 }
 
-func (s *server) getOriginalImageContent(path string, r *http.Request) ([]byte, *time.Time, error) {
-	path = replaceImagePathExt(path, r)
-
-	fmt.Printf("Get original image %s\n", path)
-
+func (s *server) getOriginalImageContent(path string) ([]byte, *time.Time, error) {
 	return s.s3.GetContentWithModTime(path)
 }
 
 func (s *server) writeFile(filename string, content []byte) error {
+	// TODO: async
 	localResizedPath := s.getLocalResizedPath(filename)
 	cloudResizedPath := s.getCloudResizedPath(filename)
 
@@ -158,15 +151,11 @@ func (s *server) writeFile(filename string, content []byte) error {
 		}
 	}
 
-	fmt.Printf("Saving image to local %s\n", localResizedPath)
-
 	err := s.s3.UploadContent(cloudResizedPath, content)
 
 	if err != nil {
 		return errors.New(fmt.Sprintf("Error writing out resized image, %s\n", err))
 	}
-
-	fmt.Printf("Saving image to cloud S3://%s\n", cloudResizedPath)
 
 	return nil
 }
@@ -178,20 +167,17 @@ func replaceImagePathExt(filepath string, r *http.Request) string {
 	if !ok || len(keys[0]) < 1 {
 		ext = path.Ext(filepath)
 	} else {
-		ext = keys[0]
+		ext = "." + keys[0]
 	}
 
 	return filepath[0:len(filepath)-len(path.Ext(filepath))] + ext
 }
 
-func buildResponse(w http.ResponseWriter, r *http.Request, content io.ReadSeeker, modTime time.Time) {
-	fmt.Printf(" == RESP == \n\n")
-
-	http.ServeContent(w, r, "", modTime, content)
+func buildResponse(w http.ResponseWriter, r *http.Request, filename string, content io.ReadSeeker, modTime time.Time) {
+	// TODO: add etag
+	http.ServeContent(w, r, filename, modTime, content)
 }
 
 func buildError(w http.ResponseWriter, error string, code int) {
-	fmt.Printf(" == ERROR == \n\n")
-
 	http.Error(w, error, code)
 }
