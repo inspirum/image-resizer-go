@@ -16,7 +16,9 @@ type server struct {
 	router         *httprouter.Router
 	s3             *s3client
 	localCacheRoot string
+	cloudCache     bool
 	cloudCacheRoot string
+	cacheMaxAge    int
 }
 
 func (s *server) getLocalResizedPath(path string) string {
@@ -30,23 +32,20 @@ func (s *server) getCloudResizedPath(path string) string {
 func main() {
 	routerMux := httprouter.New()
 	s3Service := NewS3Client(
-		os.Getenv("S3_ENDPOINT"),
-		os.Getenv("S3_BUCKET"),
-		os.Getenv("S3_KEY"),
-		os.Getenv("S3_SECRET"),
-		os.Getenv("S3_REGION"),
+		GetEnv("S3_ENDPOINT", ""),
+		GetEnv("S3_BUCKET", ""),
+		GetEnv("S3_KEY", ""),
+		GetEnv("S3_SECRET", ""),
+		GetEnv("S3_REGION", ""),
 	)
-
-	localPrefix, ok := os.LookupEnv("STORAGE_LOCAL_PREFIX")
-	if !ok {
-		localPrefix = "./cache/"
-	}
 
 	s := &server{
 		routerMux,
 		s3Service,
-		localPrefix,
-		os.Getenv("STORAGE_CLOUD_PREFIX"),
+		GetEnv("STORAGE_LOCAL_PREFIX", "./cache/"),
+		GetEnvAsBool("STORAGE_CLOUD_ENABLED", true),
+		GetEnv("STORAGE_CLOUD_PREFIX", ""),
+		GetEnvAsInt("STORAGE_CLOUD_PREFIX", 7200),
 	}
 
 	s.router.GET("/image/:template/*filepath", s.imageResizeHandler)
@@ -66,19 +65,18 @@ func (s *server) imageResizeHandler(w http.ResponseWriter, r *http.Request, p ht
 	}
 
 	originalFilename := ReplacePathExt(filename, r)
-
-	originalFile, modTime, err := s.getOriginalImageFile(originalFilename)
-	if err != nil {
-		// TODO: add no-image placeholder response
-		s.buildError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-		return
-	}
-
 	originalExt := strings.ToLower(filepath.Ext(originalFilename))
 	resizedExt := strings.ToLower(filepath.Ext(filename))
 
 	if err := validateFilename(originalExt); err != nil {
 		s.buildError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	originalFile, modTime, err := s.getOriginalImageFile(originalFilename)
+	if err != nil {
+		// TODO: add no-image placeholder response
+		s.buildError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
 	}
 
@@ -121,7 +119,9 @@ func (s *server) getOriginalImageFile(path string) (*os.File, *time.Time, error)
 
 func (s *server) writeResizedImageFile(filename string, content io.ReadSeeker) {
 	go WriteFileFromReader(s.getLocalResizedPath(filename), content)
-	go s.s3.UploadContentReader(s.getCloudResizedPath(filename), content)
+	if s.cloudCache {
+		go s.s3.UploadContentReader(s.getCloudResizedPath(filename), content)
+	}
 }
 
 func (s *server) buildResponse(w http.ResponseWriter, r *http.Request, filename string, content io.ReadSeeker, modTime time.Time) {
@@ -129,10 +129,13 @@ func (s *server) buildResponse(w http.ResponseWriter, r *http.Request, filename 
 		defer f.Close()
 	}
 
-	// TODO: add etag
+	w.Header().Set("Cache-Control", fmt.Sprintf("max-age=%d, public", s.cacheMaxAge))
+
 	http.ServeContent(w, r, filename, modTime, content)
 }
 
 func (s *server) buildError(w http.ResponseWriter, err string, code int) {
+	w.Header().Set("Cache-Control", "max-age=60, public")
+
 	http.Error(w, err, code)
 }

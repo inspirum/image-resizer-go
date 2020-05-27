@@ -35,6 +35,8 @@ func NewTemplate(template string, inputExt string, outputExt string) *Template {
 	crop := false
 	upscale := false
 
+	// TODO: add fallback to old templates (small, large, etc.)
+
 	parts := strings.Split(template, "-")
 	for _, part := range parts {
 		if part[0] == 'w' {

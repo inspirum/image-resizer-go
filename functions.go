@@ -7,8 +7,35 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"time"
 )
+
+func GetEnv(key string, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+
+	return fallback
+}
+
+func GetEnvAsInt(key string, fallback int) int {
+	if value, ok := os.LookupEnv(key); ok {
+		value, _ := strconv.Atoi(value)
+		return value
+	}
+
+	return fallback
+}
+
+func GetEnvAsBool(key string, fallback bool) bool {
+	if value, ok := os.LookupEnv(key); ok {
+		value, _ := strconv.ParseBool(value)
+		return value
+	}
+
+	return fallback
+}
 
 func GetReaderContentType(c io.ReadSeeker) (mime string, err error) {
 	b := make([]byte, 512)
