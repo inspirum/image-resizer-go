@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	_ "golang.org/x/image/bmp"
@@ -11,11 +10,10 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
-	"io"
-	"io/ioutil"
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -30,41 +28,7 @@ type Template struct {
 	outputExt string
 }
 
-func validateFilename(ext string) error {
-	supportedFormats := [...]string{
-		".jpg",
-		".jpeg",
-		".png",
-		".gif",
-		".webp",
-		".svg",
-		".bmp",
-		".tiff",
-		".pdf",
-	}
-
-	for _, f := range supportedFormats {
-		if f == ext {
-			return nil
-		}
-	}
-
-	return errors.New("not supported file format")
-}
-
-func isOriginalTemplate(template string, ext string) bool {
-	return template == "original" || ext == ".svg" || ext == ".pdf"
-}
-
-func validateTemplate(template string) error {
-	if !strings.HasPrefix(template, "custom") {
-		return errors.New("not supported template")
-	}
-
-	return nil
-}
-
-func NewTemplate(template string) *Template {
+func NewTemplate(template string, inputExt string, outputExt string) *Template {
 	width := 0.0
 	height := 0.0
 	ratio := 0.0
@@ -91,10 +55,10 @@ func NewTemplate(template string) *Template {
 		}
 	}
 
-	return &Template{width, height, ratio, crop, upscale, "", ""}
+	return &Template{width, height, ratio, crop, upscale, inputExt, outputExt}
 }
 
-func (t *Template) getFinal(originalWidth float64, originalHeight float64) (int, int) {
+func (t *Template) getDimensions(originalWidth float64, originalHeight float64) (int, int) {
 	outputWidth := originalWidth
 	outputHeight := originalHeight
 	originalRatio := originalWidth / originalHeight
@@ -141,77 +105,83 @@ func (t *Template) getFinal(originalWidth float64, originalHeight float64) (int,
 	return int(math.Round(outputWidth)), int(math.Round(outputHeight))
 }
 
-func resizeImage(content []byte, template *Template) (io.ReadSeeker, error) {
-	c, _, err := image.DecodeConfig(bytes.NewReader(content))
+func ResizeImage(f *os.File, outputFile string, template *Template) (*os.File, error) {
+	defer f.Close()
+	defer os.Remove(f.Name())
+
+	c, _, err := image.DecodeConfig(f)
 	if err != nil {
 		return nil, err
 	}
 
-	finalWidth, finalHeight := template.getFinal(float64(c.Width), float64(c.Height))
+	outputWidth, outputHeight := template.getDimensions(float64(c.Width), float64(c.Height))
 
-	inputFilename, err := createTempFileFromContent(content, template.inputExt)
-	if err != nil {
-		return nil, err
-	}
-	defer os.Remove(inputFilename.Name())
-
-	outputFilename, err := createTempFileFromContent([]byte(""), template.outputExt)
-	if err != nil {
-		return nil, err
-	}
-	defer os.Remove(outputFilename.Name())
-
-	resizeGeometryArg := "%dx%d"
+	resizeGeometryArg := "%dx%d>"
 	backgroundArg := "none"
 	gravityArg := "center"
 	extentArg := "%dx%d"
+
+	if template.crop {
+		resizeGeometryArg = "%dx%d^"
+	} else if template.upscale {
+		resizeGeometryArg = "%dx%d"
+	}
 
 	if template.outputExt == ".jpg" || template.outputExt == ".jpeg" {
 		backgroundArg = "white"
 	}
 
-	if template.crop {
-		resizeGeometryArg = "%dx%d^"
-	}
-
 	args := []string{
-		inputFilename.Name(),
-		"-resize", fmt.Sprintf(resizeGeometryArg, finalWidth, finalHeight),
+		f.Name(),
+		"-resize", fmt.Sprintf(resizeGeometryArg, outputWidth, outputHeight),
 		"-background", backgroundArg,
 		"-gravity", gravityArg,
-		"-extent", fmt.Sprintf(extentArg, finalWidth, finalHeight),
-		outputFilename.Name(),
+		"-extent", fmt.Sprintf(extentArg, outputWidth, outputHeight),
+		outputFile,
 	}
 
-	cmd := exec.Command("/usr/local/bin/convert", args...)
+	_ = os.MkdirAll(filepath.Dir(outputFile), 0700)
+
+	cmd := exec.Command("convert", args...)
 
 	err = cmd.Run()
 	if err != nil {
 		return nil, err
 	}
 
-	f, err := os.Open(outputFilename.Name())
-	if err != nil {
-		return nil, err
-	}
-
-	return f, nil
+	return os.Open(outputFile)
 }
 
-func createTempFileFromContent(content []byte, ext string) (*os.File, error) {
-	f, err := ioutil.TempFile("", "_resized_*"+ext)
-
-	if err != nil {
-		return nil, err
+func validateFilename(ext string) error {
+	supportedFormats := [...]string{
+		".jpg",
+		".jpeg",
+		".png",
+		".gif",
+		".webp",
+		".svg",
+		".bmp",
+		".tiff",
+		".pdf",
 	}
 
-	if _, err := f.Write(content); err != nil {
-		return nil, err
+	for _, f := range supportedFormats {
+		if f == ext {
+			return nil
+		}
 	}
 
-	if err := f.Close(); err != nil {
-		return nil, err
+	return errors.New("not supported file format")
+}
+
+func isOriginalTemplate(template string, ext string) bool {
+	return template == "original" || ext == ".svg" || ext == ".pdf"
+}
+
+func validateTemplate(template string) error {
+	if !strings.HasPrefix(template, "custom") {
+		return errors.New("not supported template")
 	}
 
-	return f, nil
+	return nil
 }

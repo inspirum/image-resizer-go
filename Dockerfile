@@ -16,12 +16,17 @@ RUN go build -o ./out/resizer .
 
 FROM alpine
 
-RUN apk add --no-cache \
-    imagemagick \
-    file
+ENV STORAGE_LOCAL_PREFIX=/var/www/cache/
 
-COPY --from=dependencies /tmp/build/out/resizer /app/resizer
+WORKDIR /var/www/
+
+RUN apk add --no-cache \
+        imagemagick \
+        file && \
+    mkdir -p /var/www/cache
+
+COPY --from=dependencies /tmp/build/out/resizer .
 
 EXPOSE 3000
 
-CMD ["/app/resizer"]
+CMD ["/var/www/resizer"]
