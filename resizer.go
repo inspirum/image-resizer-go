@@ -11,6 +11,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"math"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -107,10 +108,8 @@ func (t *Template) getDimensions(originalWidth float64, originalHeight float64) 
 	return int(math.Round(outputWidth)), int(math.Round(outputHeight))
 }
 
-func ResizeImage(f *os.File, outputFile string, template *Template) (*os.File, error) {
-	defer f.Close()
-	defer os.Remove(f.Name())
-
+func ConvertFile(f *os.File, outputFile string, template *Template) (*os.File, error) {
+	// TODO: optimize images (even original template)
 	c, _, err := image.DecodeConfig(f)
 	if err != nil {
 		return nil, err
@@ -173,17 +172,21 @@ func validateFilename(ext string) error {
 		}
 	}
 
-	return errors.New("not supported file format")
-}
-
-func isOriginalTemplate(template string, ext string) bool {
-	return template == "original" || ext == ".svg" || ext == ".pdf"
+	return HttpError{errors.New("not supported file format"), http.StatusBadRequest}
 }
 
 func validateTemplate(template string) error {
+	if template == "original" {
+		return nil
+	}
+
 	if !strings.HasPrefix(template, "custom") {
-		return errors.New("not supported template")
+		return HttpError{errors.New("not supported template"), http.StatusBadRequest}
 	}
 
 	return nil
+}
+
+func shouldNotResize(template string, ext string) bool {
+	return template == "original" || ext == ".svg" || ext == ".pdf"
 }
