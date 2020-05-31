@@ -29,6 +29,7 @@ type HttpError struct {
 
 func main() {
 	routerMux := httprouter.New()
+	// TODO: multiple session by domain
 	s3Service := NewS3Client(
 		GetEnv("S3_ENDPOINT", ""),
 		GetEnv("S3_BUCKET", ""),
@@ -74,6 +75,8 @@ func (s *server) ServeFile(w http.ResponseWriter, r *http.Request, p httprouter.
 
 	resizedFile, modTime, err := s.getResizedImageFile(template + filename)
 	if err == nil {
+		s.writeResizedImageFile(template+filename, resizedFile)
+
 		s.buildResponse(w, r, filename, resizedFile, *modTime)
 		return
 	}
@@ -111,7 +114,9 @@ func (s *server) getResizedImageFile(path string) (f *os.File, t *time.Time, err
 		return
 	}
 
-	f, t, err = s.s3.DownloadFileWithModTime(s.getCloudResizedPath(path), s.getLocalResizedPath(path))
+	if s.cloudCache {
+		f, t, err = s.s3.DownloadFileWithModTime(s.getCloudResizedPath(path), s.getLocalResizedPath(path))
+	}
 
 	return
 }
@@ -122,6 +127,10 @@ func (s *server) getOriginalImageFile(path string) (*os.File, *time.Time, error)
 
 func (s *server) resizeImageFile(template string, originalFile *os.File, modTime *time.Time, outputFilename string, originalExt string, resizedExt string) (*os.File, *time.Time, error) {
 	if shouldNotResize(template, originalExt) {
+		// TODO: do not close & open
+		originalFile.Close()
+		_ = OptimizeFile(originalFile.Name(), originalExt)
+		originalFile, _ = os.Open(originalFile.Name())
 		return originalFile, modTime, nil
 	}
 
@@ -136,9 +145,11 @@ func (s *server) resizeImageFile(template string, originalFile *os.File, modTime
 }
 
 func (s *server) writeResizedImageFile(filename string, content io.ReadSeeker) {
-	go WriteFileFromReader(s.getLocalResizedPath(filename), content)
+	// TODO: make async
+	WriteFileFromReader(s.getLocalResizedPath(filename), content)
+
 	if s.cloudCache {
-		go s.s3.UploadContentReader(s.getCloudResizedPath(filename), content)
+		s.s3.UploadContentReader(s.getCloudResizedPath(filename), content)
 	}
 }
 

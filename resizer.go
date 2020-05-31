@@ -29,6 +29,24 @@ type Template struct {
 	outputExt string
 }
 
+var convertCmd = GetEnv("CMD_CONVERT", "convert")
+
+var optimizerCmd = map[string]string{
+	"png":  GetEnv("CMD_OPTIMIZER_PNG", "pngquant --force --ext .png --skip-if-larger --quality 0-80 --speed 4 --strip -- %file"),
+	"jpg":  GetEnv("CMD_OPTIMIZER_JPG", "jpegoptim --force --strip-all --max 70 --quit --all-progressive %file"),
+	"gif":  GetEnv("CMD_OPTIMIZER_GIF", "gifsicle --batch --optimize=3 %file"),
+	"svg":  GetEnv("CMD_OPTIMIZER_SVG", "svgcleaner %file %file"),
+	"webp": GetEnv("CMD_OPTIMIZER_WEBP", "cwebp -m 6 -pass 10 -mt -q 90 %file"),
+}
+
+var optimizerCmdExtMapper = map[string]string{
+	".png":  "png",
+	".jpg":  "jpg",
+	".jpeg": "jpg",
+	".gif":  "gif",
+	".webp": "webp",
+}
+
 func NewTemplate(template string, inputExt string, outputExt string) *Template {
 	width := 0.0
 	height := 0.0
@@ -108,14 +126,15 @@ func (t *Template) getDimensions(originalWidth float64, originalHeight float64) 
 	return int(math.Round(outputWidth)), int(math.Round(outputHeight))
 }
 
-func ConvertFile(f *os.File, outputFile string, template *Template) (*os.File, error) {
-	// TODO: optimize images (even original template)
+func ConvertFile(f *os.File, outputFilename string, template *Template) (*os.File, error) {
 	c, _, err := image.DecodeConfig(f)
 	if err != nil {
 		return nil, err
 	}
 
 	outputWidth, outputHeight := template.getDimensions(float64(c.Width), float64(c.Height))
+
+	_ = os.MkdirAll(filepath.Dir(outputFilename), 0700)
 
 	resizeGeometryArg := "%dx%d>"
 	backgroundArg := "none"
@@ -138,19 +157,40 @@ func ConvertFile(f *os.File, outputFile string, template *Template) (*os.File, e
 		"-background", backgroundArg,
 		"-gravity", gravityArg,
 		"-extent", fmt.Sprintf(extentArg, outputWidth, outputHeight),
-		outputFile,
+		outputFilename,
 	}
-
-	_ = os.MkdirAll(filepath.Dir(outputFile), 0700)
-
-	cmd := exec.Command("convert", args...)
+	cmd := exec.Command(convertCmd, args...)
 
 	err = cmd.Run()
 	if err != nil {
 		return nil, err
 	}
 
-	return os.Open(outputFile)
+	err = OptimizeFile(outputFilename, template.outputExt)
+	if err != nil {
+		return nil, err
+	}
+
+	return os.Open(outputFilename)
+}
+
+func OptimizeFile(outputFilename string, outputExt string) error {
+	optimizer, found := optimizerCmd[optimizerCmdExtMapper[outputExt]]
+	if !found || optimizer == "" {
+		fmt.Print("not found")
+		return nil
+	}
+
+	args := strings.Split(strings.ReplaceAll(optimizer, "%file", outputFilename), " ")
+	fmt.Print(args)
+	cmd := exec.Command(args[0], args[1:]...)
+
+	err := cmd.Run()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func validateFilename(ext string) error {
