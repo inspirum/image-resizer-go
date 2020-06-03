@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -69,20 +70,42 @@ func OpenFileWithModTime(p string) (*os.File, *time.Time, error) {
 	return f, &t, nil
 }
 
-func WriteFileFromReader(p string, c io.Reader) (err error) {
+func WriteFileFromReader(p string, c io.Reader) (bool, error) {
 	if _, err := os.Stat(p); !os.IsNotExist(err) {
-		return nil
+		return false, nil
 	}
 
-	_ = os.MkdirAll(filepath.Dir(p), 0700)
+	_ = os.MkdirAll(filepath.Dir(p), 0777)
 
-	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0700)
+	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
+	if err != nil {
+		return false, err
+	}
+
+	_, err = io.Copy(f, c)
+	_ = f.Close()
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func CopyFile(src, dst string) (err error) {
+	srcFile, err := os.Open(src)
 	if err != nil {
 		return
 	}
+	defer srcFile.Close()
 
-	defer f.Close()
-	_, err = io.Copy(f, c)
+	_ = os.MkdirAll(filepath.Dir(dst), 0777)
+	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
+	if err != nil {
+		return
+	}
+	defer dstFile.Close()
+
+	_, err = io.Copy(dstFile, srcFile)
 
 	return
 }
@@ -95,7 +118,12 @@ func CreateTempFileFromReader(c io.Reader, ext string) (f *os.File, err error) {
 	}
 
 	_, err = io.Copy(f, c)
-	f.Seek(0, io.SeekStart)
+
+	if err != nil {
+		return
+	}
+
+	_, err = f.Seek(0, io.SeekStart)
 
 	return
 }
@@ -108,4 +136,12 @@ func ReplacePathExt(filepath string, r *http.Request) string {
 	}
 
 	return filepath[0:len(filepath)-len(path.Ext(filepath))+1] + ext
+}
+
+var verbose = GetEnvAsBool("VERBOSE", true)
+
+func logger(format string, a ...interface{}) {
+	if verbose {
+		fmt.Printf(format, a...)
+	}
 }

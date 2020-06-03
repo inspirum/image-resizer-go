@@ -20,13 +20,11 @@ import (
 )
 
 type Template struct {
-	width     float64
-	height    float64
-	ratio     float64
-	crop      bool
-	upscale   bool
-	inputExt  string
-	outputExt string
+	width   float64
+	height  float64
+	ratio   float64
+	crop    bool
+	upscale bool
 }
 
 var convertCmd = GetEnv("CMD_CONVERT", "convert")
@@ -47,14 +45,24 @@ var optimizerCmdExtMapper = map[string]string{
 	".webp": "webp",
 }
 
-func NewTemplate(template string, inputExt string, outputExt string) *Template {
+var supportedFormats = [...]string{
+	".webp",
+	".png",
+	".svg",
+	".jpg",
+	".gif",
+	".jpeg",
+	".bmp",
+	".tiff",
+	".pdf",
+}
+
+func NewTemplate(template string) *Template {
 	width := 0.0
 	height := 0.0
 	ratio := 0.0
 	crop := false
 	upscale := false
-
-	// TODO: add fallback to old templates (small, large, etc.)
 
 	parts := strings.Split(template, "-")
 	for _, part := range parts {
@@ -76,7 +84,7 @@ func NewTemplate(template string, inputExt string, outputExt string) *Template {
 		}
 	}
 
-	return &Template{width, height, ratio, crop, upscale, inputExt, outputExt}
+	return &Template{width, height, ratio, crop, upscale}
 }
 
 func (t *Template) getDimensions(originalWidth float64, originalHeight float64) (int, int) {
@@ -126,85 +134,73 @@ func (t *Template) getDimensions(originalWidth float64, originalHeight float64) 
 	return int(math.Round(outputWidth)), int(math.Round(outputHeight))
 }
 
-func ConvertFile(f *os.File, outputFilename string, template *Template) (*os.File, error) {
-	c, _, err := image.DecodeConfig(f)
+func GetImageDimensions(p string) (w int, h int, err error) {
+	f, err := os.Open(p)
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	outputWidth, outputHeight := template.getDimensions(float64(c.Width), float64(c.Height))
+	c, _, err := image.DecodeConfig(f)
+	if err != nil {
+		return
+	}
 
-	_ = os.MkdirAll(filepath.Dir(outputFilename), 0700)
+	return c.Width, c.Height, nil
+}
 
-	resizeGeometryArg := "%dx%d>"
-	backgroundArg := "none"
-	gravityArg := "center"
-	extentArg := "%dx%d"
+func ConvertFile(inputFilePath string, inputWidth int, inputHeight int, outputFilePath string, template *Template) (err error) {
+	outputWidth, outputHeight := template.getDimensions(float64(inputWidth), float64(inputHeight))
+	outputExt := strings.ToLower(filepath.Ext(outputFilePath))
+	var resizeGeometryArg, backgroundArg string
 
 	if template.crop {
 		resizeGeometryArg = "%dx%d^"
 	} else if template.upscale {
 		resizeGeometryArg = "%dx%d"
+	} else {
+		resizeGeometryArg = "%dx%d>"
 	}
 
-	if template.outputExt == ".jpg" || template.outputExt == ".jpeg" {
+	if outputExt == ".jpg" || outputExt == ".jpeg" {
 		backgroundArg = "white"
+	} else {
+		backgroundArg = "none"
 	}
 
 	args := []string{
-		f.Name(),
+		inputFilePath,
 		"-resize", fmt.Sprintf(resizeGeometryArg, outputWidth, outputHeight),
 		"-background", backgroundArg,
-		"-gravity", gravityArg,
-		"-extent", fmt.Sprintf(extentArg, outputWidth, outputHeight),
-		outputFilename,
-	}
-	cmd := exec.Command(convertCmd, args...)
-
-	err = cmd.Run()
-	if err != nil {
-		return nil, err
+		"-gravity", "center",
+		"-extent", fmt.Sprintf("%dx%d", outputWidth, outputHeight),
+		outputFilePath,
 	}
 
-	err = OptimizeFile(outputFilename, template.outputExt)
-	if err != nil {
-		return nil, err
-	}
+	_ = os.MkdirAll(filepath.Dir(outputFilePath), 0777)
 
-	return os.Open(outputFilename)
+	logger("RESIZE %s %v\n", convertCmd, args)
+	err = exec.Command(convertCmd, args...).Run()
+
+	return
 }
 
-func OptimizeFile(outputFilename string, outputExt string) error {
-	optimizer, found := optimizerCmd[optimizerCmdExtMapper[outputExt]]
+func OptimizeFile(filePath string) (err error) {
+	ext := strings.ToLower(filepath.Ext(filePath))
+	optimizer, found := optimizerCmd[optimizerCmdExtMapper[ext]]
 	if !found || optimizer == "" {
-		fmt.Print("not found")
 		return nil
 	}
 
-	args := strings.Split(strings.ReplaceAll(optimizer, "%file", outputFilename), " ")
-	fmt.Print(args)
-	cmd := exec.Command(args[0], args[1:]...)
+	args := strings.Split(strings.ReplaceAll(optimizer, "%file", filePath), " ")
 
-	err := cmd.Run()
-	if err != nil {
-		return err
-	}
+	logger("OPTIMIZE %v\n", args)
+	err = exec.Command(args[0], args[1:]...).Run()
 
-	return nil
+	return
 }
 
-func validateFilename(ext string) error {
-	supportedFormats := [...]string{
-		".jpg",
-		".jpeg",
-		".png",
-		".gif",
-		".webp",
-		".svg",
-		".bmp",
-		".tiff",
-		".pdf",
-	}
+func validateFilename(filePath string) error {
+	ext := strings.ToLower(filepath.Ext(filePath))
 
 	for _, f := range supportedFormats {
 		if f == ext {
@@ -216,17 +212,18 @@ func validateFilename(ext string) error {
 }
 
 func validateTemplate(template string) error {
-	if template == "original" {
-		return nil
-	}
-
-	if !strings.HasPrefix(template, "custom") {
+	if template != "original" && !strings.HasPrefix(template, "custom") {
 		return HttpError{errors.New("not supported template"), http.StatusBadRequest}
 	}
 
 	return nil
 }
 
-func shouldNotResize(template string, ext string) bool {
-	return template == "original" || ext == ".svg" || ext == ".pdf"
+func shouldNotResize(template string, filePath string) bool {
+	if template == "original" {
+		return true
+	}
+
+	ext := strings.ToLower(filepath.Ext(filePath))
+	return ext == ".svg" || ext == ".pdf"
 }
