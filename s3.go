@@ -61,8 +61,8 @@ func (c *s3client) DownloadFileWithModTime(path string, outputPath string) (f *o
 	return
 }
 
-func (c *s3client) UploadIfNewerContentReader(path string, time time.Time, content io.ReadSeeker) (bool, error) {
-	resp, err := c.getContent(path)
+func (c *s3client) UploadContentReaderIfNewer(path string, time time.Time, content io.ReadSeeker) (bool, error) {
+	resp, err := c.headContent(path)
 
 	if err == nil && resp.LastModified.After(time) {
 		return false, nil
@@ -100,6 +100,15 @@ func (c *s3client) putContent(path string, content io.ReadSeeker, mime string) (
 
 func (c *s3client) getContent(path string) (resp *s3.GetObjectOutput, err error) {
 	resp, err = c.s3.GetObject(&s3.GetObjectInput{
+		Bucket: aws.String(c.bucket),
+		Key:    aws.String(path),
+	})
+
+	return
+}
+
+func (c *s3client) headContent(path string) (resp *s3.HeadObjectOutput, err error) {
+	resp, err = c.s3.HeadObject(&s3.HeadObjectInput{
 		Bucket: aws.String(c.bucket),
 		Key:    aws.String(path),
 	})

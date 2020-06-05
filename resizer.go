@@ -30,11 +30,11 @@ type Template struct {
 var convertCmd = GetEnv("CMD_CONVERT", "convert")
 
 var optimizerCmd = map[string]string{
-	"png":  GetEnv("CMD_OPTIMIZER_PNG", "pngquant --force --ext .png --skip-if-larger --quality 0-80 --speed 4 --strip -- %file"),
-	"jpg":  GetEnv("CMD_OPTIMIZER_JPG", "jpegoptim --force --strip-all --max 70 --quit --all-progressive %file"),
+	"png":  GetEnv("CMD_OPTIMIZER_PNG", "pngquant --force --ext .png --skip-if-larger --quality 0-75 --speed 4 --strip -- %file"),
+	"jpg":  GetEnv("CMD_OPTIMIZER_JPG", "jpegoptim --force --strip-all --max 75 --quiet --all-progressive %file"),
 	"gif":  GetEnv("CMD_OPTIMIZER_GIF", "gifsicle --batch --optimize=3 %file"),
 	"svg":  GetEnv("CMD_OPTIMIZER_SVG", "svgcleaner %file %file"),
-	"webp": GetEnv("CMD_OPTIMIZER_WEBP", "cwebp -m 6 -pass 10 -mt -q 90 %file"),
+	"webp": GetEnv("CMD_OPTIMIZER_WEBP", "cwebp -m 6 -pass 10 -mt -q 75 -quiet %file -o %file"),
 }
 
 var optimizerCmdExtMapper = map[string]string{
@@ -122,7 +122,7 @@ func (t *Template) getDimensions(originalWidth float64, originalHeight float64) 
 		upscaleHeight := originalHeight / outputHeight
 		outputRatio := outputWidth / outputHeight
 
-		if upscaleWidth < 1 && upscaleWidth < upscaleHeight {
+		if upscaleWidth < 1 && upscaleWidth <= upscaleHeight {
 			outputWidth = originalWidth
 			outputHeight = originalWidth / outputRatio
 		} else if upscaleHeight < 1 && upscaleHeight < upscaleWidth {

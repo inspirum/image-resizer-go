@@ -67,7 +67,6 @@ func (s *server) ServeFile(w http.ResponseWriter, r *http.Request, p httprouter.
 	}
 
 	originalFilename := ReplacePathExt(filename, r)
-
 	if err := validateFilename(originalFilename); err != nil {
 		s.buildErrorResponse(w, err)
 		return
@@ -82,6 +81,7 @@ func (s *server) ServeFile(w http.ResponseWriter, r *http.Request, p httprouter.
 
 	originalFile, err := s.getOriginalImageFile(originalFilename)
 	if err != nil {
+		logger("Err: %v", err)
 		s.buildNotFoundResponse(w, r, template)
 		return
 	}
@@ -168,7 +168,7 @@ func (s *server) writeResizedImageFile(filePath string, content io.ReadSeeker, w
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			changed, _ := s.s3.UploadIfNewerContentReader(s.getCloudResizedPath(filePath), time.Now().Add(-1*time.Second*time.Duration(s.cacheMaxAge)), content)
+			changed, _ := s.s3.UploadContentReaderIfNewer(s.getCloudResizedPath(filePath), time.Now().Add(-1*time.Second*time.Duration(s.cacheMaxAge)), content)
 			if changed {
 				logger(" - [async] Written cloud resized image S3://%s\n", s.getCloudResizedPath(filePath))
 			} else {
