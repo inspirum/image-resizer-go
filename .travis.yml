@@ -1,0 +1,31 @@
+os: linux
+dist: trusty
+language: go
+fail_fast: true
+
+go:
+  - "1.14"
+
+env:
+  global:
+    - DOCKER_REPOSITORY=inspirum/image-resizer
+    - DOCKER_LOCAL_TAG=$TRAVIS_BUILD_NUMBER
+  jobs: []
+
+services:
+  - docker
+
+script:
+  - go mod download
+  - go test
+  - docker build --no-cache -t $DOCKER_LOCAL_TAG .
+
+after_success:
+  - |
+    if [[ "$TRAVIS_TAG" != "" ]]; then
+      echo $DOCKER_PASSWORD | docker login --username $DOCKER_USER --password-stdin
+      docker tag $DOCKER_LOCAL_TAG $DOCKER_REPOSITORY:$TRAVIS_TAG
+      docker push $DOCKER_REPOSITORY:$TRAVIS_TAG
+      docker tag $DOCKER_LOCAL_TAG $DOCKER_REPOSITORY:latest
+      docker push $DOCKER_REPOSITORY:latest
+    fi

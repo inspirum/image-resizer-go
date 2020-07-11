@@ -2,7 +2,11 @@
 
 **Created as part of [inspishop][link-inspishop] e-commerce platform by [inspirum][link-inspirum] team.**
 
+[![Build Status][ico-travis]][link-travis]
 [![Software License][ico-license]][link-licence]
+[![Docker Version][ico-docker-hub-version]][link-docker-hub]
+[![Docker Pulls][ico-docker-hub-downloads]][link-docker-hub]
+[![Docker Image Size][ico-docker-hub-size]][link-docker-hub]
 
 On-demand image resizing, format converting and size optimization with the best CLI tools. 
 Prepared to be used as Docker image with cloud storage as Amazon S3.
@@ -183,13 +187,17 @@ The MIT License (MIT). Please see [License File][link-licence] for more informat
 
 [ico-license]:              https://img.shields.io/github/license/inspirum/image-resizer-go.svg?style=flat-square&colorB=blue
 [ico-travis]:               https://img.shields.io/travis/inspirum/image-resizer-go/master.svg?branch=master&style=flat-square
+[ico-docker-hub-version]:   https://img.shields.io/docker/v/inspirum/image-resizer-go?sort=semver&style=flat-square&label=docker%20tag
+[ico-docker-hub-size]:      https://img.shields.io/docker/image-size/inspirum/image-resizer-go?style=flat-square&label=docker%20image%20size
+[ico-docker-hub-downloads]: https://img.shields.io/docker/pulls/inspirum/image-resizer-go?style=flat-square
+
 
 [link-author]:              https://github.com/inspirum
 [link-contributors]:        https://github.com/inspirum/image-resizer-go/contributors
 [link-licence]:             ./LICENSE.md
 [link-changelog]:           ./CHANGELOG.md
-[link-contributing]:        https://github.com/inspirum/assets/raw/master/image-resizer-go/img/CONTRIBUTING.md
-[link-code-of-conduct]:     https://github.com/inspirum/assets/raw/master/image-resizer-go/img/CODE_OF_CONDUCT.md
+[link-contributing]:        ./docs/CONTRIBUTING.md
+[link-code-of-conduct]:     /docs/CODE_OF_CONDUCT.md
 [link-travis]:              https://travis-ci.org/inspirum/image-resizer-go
 [link-inspishop]:           https://www.inspishop.cz/
 [link-inspirum]:            https://www.inspirum.cz/
