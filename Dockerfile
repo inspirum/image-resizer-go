@@ -1,7 +1,9 @@
 FROM golang:1.14-alpine AS dependencies
 
 RUN apk add --no-cache \
-    git
+    git \
+    curl \
+    tar
 
 WORKDIR /tmp/svgcleaner
 
@@ -30,7 +32,7 @@ RUN apk add --no-cache \
         pngquant \
         jpegoptim \
         gifsicle \
-        cwebp \
+        libwebp-tools \
         file && \
     mkdir -p /var/www/cache
 
