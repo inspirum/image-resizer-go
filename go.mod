@@ -1,4 +1,4 @@
-module github.com/inspirum/image-resizer
+module github.com/inspirum/image-resizer-go
 
 go 1.14
 
