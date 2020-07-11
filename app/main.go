@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	imageresizer "github.com/inspirum/image-resizer"
+	imageresizer "github.com/inspirum/image-resizer-go"
 	"github.com/julienschmidt/httprouter"
 	"io"
 	"log"
