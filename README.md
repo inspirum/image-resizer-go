@@ -187,9 +187,9 @@ The MIT License (MIT). Please see [License File][link-licence] for more informat
 
 [ico-license]:              https://img.shields.io/github/license/inspirum/image-resizer-go.svg?style=flat-square&colorB=blue
 [ico-travis]:               https://img.shields.io/travis/inspirum/image-resizer-go/master.svg?branch=master&style=flat-square
-[ico-docker-hub-version]:   https://img.shields.io/docker/v/inspirum/image-resizer-go?sort=semver&style=flat-square&label=docker%20tag
-[ico-docker-hub-size]:      https://img.shields.io/docker/image-size/inspirum/image-resizer-go?style=flat-square&label=docker%20image%20size
-[ico-docker-hub-downloads]: https://img.shields.io/docker/pulls/inspirum/image-resizer-go?style=flat-square
+[ico-docker-hub-version]:   https://img.shields.io/docker/v/inspirum/image-resizer?sort=semver&style=flat-square&label=docker%20tag
+[ico-docker-hub-size]:      https://img.shields.io/docker/image-size/inspirum/image-resizer?style=flat-square&label=docker%20image%20size
+[ico-docker-hub-downloads]: https://img.shields.io/docker/pulls/inspirum/image-resizer?style=flat-square
 
 
 [link-author]:              https://github.com/inspirum
@@ -199,5 +199,6 @@ The MIT License (MIT). Please see [License File][link-licence] for more informat
 [link-contributing]:        ./docs/CONTRIBUTING.md
 [link-code-of-conduct]:     /docs/CODE_OF_CONDUCT.md
 [link-travis]:              https://travis-ci.org/inspirum/image-resizer-go
+[link-docker-hub]:          https://hub.docker.com/repository/docker/inspirum/image-resizer/tags?page=1
 [link-inspishop]:           https://www.inspishop.cz/
 [link-inspirum]:            https://www.inspirum.cz/
