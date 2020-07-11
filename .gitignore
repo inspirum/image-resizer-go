@@ -1,4 +1,4 @@
 .idea
 *.env
-cache
+app/cache
 go.sum

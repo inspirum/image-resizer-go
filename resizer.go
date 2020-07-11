@@ -1,4 +1,4 @@
-package main
+package imageresizer
 
 import (
 	"errors"
@@ -30,11 +30,11 @@ type Template struct {
 var convertCmd = GetEnv("CMD_CONVERT", "convert")
 
 var optimizerCmd = map[string]string{
-	"png":  GetEnv("CMD_OPTIMIZER_PNG", "pngquant --force --ext .png --skip-if-larger --quality 0-75 --speed 4 --strip -- %file"),
-	"jpg":  GetEnv("CMD_OPTIMIZER_JPG", "jpegoptim --force --strip-all --max 75 --quiet --all-progressive %file"),
-	"gif":  GetEnv("CMD_OPTIMIZER_GIF", "gifsicle --batch --optimize=3 %file"),
-	"svg":  GetEnv("CMD_OPTIMIZER_SVG", "svgcleaner %file %file"),
-	"webp": GetEnv("CMD_OPTIMIZER_WEBP", "cwebp -m 6 -pass 10 -mt -q 75 -quiet %file -o %file"),
+	"png":  GetEnv("CMD_OPTIMIZER_PNG", "pngquant --force --ext .png --skip-if-larger --quality 0-75 --speed 4 --strip --") + " %file",
+	"jpg":  GetEnv("CMD_OPTIMIZER_JPG", "jpegoptim --force --strip-all --max 75 --quiet --all-progressive") + " %file",
+	"gif":  GetEnv("CMD_OPTIMIZER_GIF", "gifsicle --batch --optimize=3") + " %file",
+	"svg":  GetEnv("CMD_OPTIMIZER_SVG", "svgcleaner") + " %file %file",
+	"webp": GetEnv("CMD_OPTIMIZER_WEBP", "cwebp -m 6 -pass 10 -mt -q 75 -quiet") + " %file -o %file",
 }
 
 var optimizerCmdExtMapper = map[string]string{
@@ -199,7 +199,7 @@ func OptimizeFile(filePath string) (err error) {
 	return
 }
 
-func validateFilename(filePath string) error {
+func ValidateFilename(filePath string) error {
 	ext := strings.ToLower(filepath.Ext(filePath))
 
 	for _, f := range supportedFormats {
@@ -211,7 +211,7 @@ func validateFilename(filePath string) error {
 	return HttpError{errors.New("not supported file format"), http.StatusBadRequest}
 }
 
-func validateTemplate(template string) error {
+func ValidateTemplate(template string) error {
 	if template != "original" && !strings.HasPrefix(template, "custom") {
 		return HttpError{errors.New("not supported template"), http.StatusBadRequest}
 	}
@@ -219,7 +219,7 @@ func validateTemplate(template string) error {
 	return nil
 }
 
-func shouldNotResize(template string, filePath string) bool {
+func ShouldNotResize(template string, filePath string) bool {
 	if template == "original" {
 		return true
 	}

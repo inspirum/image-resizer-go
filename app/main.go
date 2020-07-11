@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	imageresizer "github.com/inspirum/image-resizer"
 	"github.com/julienschmidt/httprouter"
 	"io"
 	"log"
@@ -14,7 +15,7 @@ import (
 
 type server struct {
 	router           *httprouter.Router
-	s3               *s3client
+	storage          imageresizer.Storage
 	localCacheRoot   string
 	cloudCache       bool
 	cloudCacheRoot   string
@@ -22,35 +23,29 @@ type server struct {
 	notFoundFilename string
 }
 
-type HttpError struct {
-	error
-	statusCode int
-}
-
 func main() {
 	routerMux := httprouter.New()
-	// TODO: multiple session by domain
-	s3Service := NewS3Client(
-		GetEnv("S3_ENDPOINT", ""),
-		GetEnv("S3_BUCKET", ""),
-		GetEnv("S3_KEY", ""),
-		GetEnv("S3_SECRET", ""),
-		GetEnv("S3_REGION", ""),
+	s3Service := imageresizer.NewS3Client(
+		imageresizer.GetEnv("S3_ENDPOINT", ""),
+		imageresizer.GetEnv("S3_BUCKET", ""),
+		imageresizer.GetEnv("S3_KEY", ""),
+		imageresizer.GetEnv("S3_SECRET", ""),
+		imageresizer.GetEnv("S3_REGION", ""),
 	)
 
 	s := &server{
 		routerMux,
 		s3Service,
-		GetEnv("STORAGE_LOCAL_PREFIX", "./cache/"),
-		GetEnvAsBool("STORAGE_CLOUD_ENABLED", true),
-		GetEnv("STORAGE_CLOUD_PREFIX", ""),
-		GetEnvAsInt("CACHE_MAX_AGE", 7200),
-		GetEnv("NOTFOUND_FILENAME", "./static/no_image.png"),
+		imageresizer.GetEnv("STORAGE_LOCAL_PREFIX", "./cache/"),
+		imageresizer.GetEnvAsBool("STORAGE_CLOUD_ENABLED", true),
+		imageresizer.GetEnv("STORAGE_CLOUD_PREFIX", ""),
+		imageresizer.GetEnvAsInt("CACHE_MAX_AGE", 7200),
+		imageresizer.GetEnv("NOTFOUND_FILENAME", "./static/no_image.png"),
 	}
 
 	s.router.GET("/image/:template/*filepath", s.ServeFile)
 
-	port := GetEnvAsInt("PORT", 3000)
+	port := imageresizer.GetEnvAsInt("PORT", 3000)
 	fmt.Printf("Listening on http://localhost:%d/\n", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), routerMux))
 }
@@ -61,13 +56,13 @@ func (s *server) ServeFile(w http.ResponseWriter, r *http.Request, p httprouter.
 
 	logger("\n== REQ %s == %s%s?%s\n", time.Now().Format("15:04:05.000"), template, filename, r.URL.RawQuery)
 
-	if err := validateTemplate(template); err != nil {
+	if err := imageresizer.ValidateTemplate(template); err != nil {
 		s.buildErrorResponse(w, err)
 		return
 	}
 
-	originalFilename := ReplacePathExt(filename, r)
-	if err := validateFilename(originalFilename); err != nil {
+	originalFilename := imageresizer.ReplacePathExt(filename, r)
+	if err := imageresizer.ValidateFilename(originalFilename); err != nil {
 		s.buildErrorResponse(w, err)
 		return
 	}
@@ -107,42 +102,42 @@ func (s *server) getCloudResizedPath(path string) string {
 
 func (s *server) getResizedImageFile(path string) (f *os.File, t *time.Time, err error) {
 	logger("Get local resized image %s\n", s.getLocalResizedPath(path))
-	f, t, err = OpenFileWithModTime(s.getLocalResizedPath(path))
+	f, t, err = imageresizer.OpenFileWithModTime(s.getLocalResizedPath(path))
 
 	if err != nil && s.cloudCache {
-		logger("Get cloud resized image S3://%s\n", s.getCloudResizedPath(path))
-		f, t, err = s.s3.DownloadFileWithModTime(s.getCloudResizedPath(path), s.getLocalResizedPath(path))
+		logger("Get cloud resized image cloud://%s\n", s.getCloudResizedPath(path))
+		f, t, err = s.storage.DownloadFileWithModTime(s.getCloudResizedPath(path), s.getLocalResizedPath(path))
 	}
 
 	return
 }
 
 func (s *server) getOriginalImageFile(path string) (*os.File, error) {
-	logger("Get original image S3:/%s\n", path)
-	return s.s3.DownloadFile(path, "")
+	logger("Get original image cloud:/%s\n", path)
+	return s.storage.DownloadFile(path, "")
 }
 
 func (s *server) resizeImageFile(inputFilePath string, outputFilePath string, template string) (*os.File, error) {
-	if shouldNotResize(template, inputFilePath) {
+	if imageresizer.ShouldNotResize(template, inputFilePath) {
 		logger("Return original\n")
-		err := CopyFile(inputFilePath, outputFilePath)
+		err := imageresizer.CopyFile(inputFilePath, outputFilePath)
 		if err != nil {
 			return nil, err
 		}
 	} else {
 		logger("Return resized\n")
-		w, h, err := GetImageDimensions(inputFilePath)
+		w, h, err := imageresizer.GetImageDimensions(inputFilePath)
 		if err != nil {
 			return nil, err
 		}
 
-		err = ConvertFile(inputFilePath, w, h, outputFilePath, NewTemplate(template))
+		err = imageresizer.ConvertFile(inputFilePath, w, h, outputFilePath, imageresizer.NewTemplate(template))
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	err := OptimizeFile(outputFilePath)
+	err := imageresizer.OptimizeFile(outputFilePath)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +150,7 @@ func (s *server) writeResizedImageFile(filePath string, content io.ReadSeeker, w
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		changed, _ := WriteFileFromReader(s.getLocalResizedPath(filePath), content)
+		changed, _ := imageresizer.WriteFileFromReader(s.getLocalResizedPath(filePath), content)
 		if changed {
 			logger(" - [async] Written local resized image %s\n", s.getLocalResizedPath(filePath))
 		} else {
@@ -164,15 +159,15 @@ func (s *server) writeResizedImageFile(filePath string, content io.ReadSeeker, w
 	}()
 
 	if s.cloudCache {
-		logger("Write cloud resized image S3://%s\n", s.getCloudResizedPath(filePath))
+		logger("Write cloud resized image cloud://%s\n", s.getCloudResizedPath(filePath))
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			changed, _ := s.s3.UploadContentReaderIfNewer(s.getCloudResizedPath(filePath), time.Now().Add(-1*time.Second*time.Duration(s.cacheMaxAge)), content)
+			changed, _ := s.storage.UploadContentReaderIfNewer(s.getCloudResizedPath(filePath), time.Now().Add(-1*time.Second*time.Duration(s.cacheMaxAge)), content)
 			if changed {
-				logger(" - [async] Written cloud resized image S3://%s\n", s.getCloudResizedPath(filePath))
+				logger(" - [async] Written cloud resized image cloud://%s\n", s.getCloudResizedPath(filePath))
 			} else {
-				logger(" - [async] Unchanged cloud resized image S3://%s\n", s.getCloudResizedPath(filePath))
+				logger(" - [async] Unchanged cloud resized image cloud://%s\n", s.getCloudResizedPath(filePath))
 			}
 		}()
 	}
@@ -222,12 +217,20 @@ func (s *server) buildNotFoundResponse(w http.ResponseWriter, r *http.Request, t
 
 func (s *server) buildErrorResponse(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
-	if err, ok := err.(HttpError); ok {
-		code = err.statusCode
+	if err, ok := err.(imageresizer.HttpError); ok {
+		code = err.StatusCode
 	}
 
 	w.Header().Set("Cache-Control", "max-age=60, public")
 	http.Error(w, err.Error(), code)
 
 	logger("== ERR %s == %d %s\n", time.Now().Format("15:04:05.000"), code, err.Error())
+}
+
+var verbose = imageresizer.GetEnvAsBool("VERBOSE", true)
+
+func logger(format string, a ...interface{}) {
+	if verbose {
+		fmt.Printf(format, a...)
+	}
 }

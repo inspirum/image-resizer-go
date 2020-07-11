@@ -4,12 +4,12 @@
 
 [![Software License][ico-license]][link-licence]
 
-On-demand image resizing, format converting and optimization with the best CLI tools. 
+On-demand image resizing, format converting and size optimization with the best CLI tools. 
 Prepared to be used as Docker image with cloud storage as Amazon S3.
 
 - image [resizing](#resizing), [format converting](#format-encoding) and [optimization](#optimization)
 - support for **jpeg**, **png**, **webp**, **bmp**, **gif**, **tiff**, **svg** image formats
-- file-caching resized images on local disk *(temporary cache)* and cloud storage *(persistent cache)*
+- file-cache for resized images on local disk *(temporary cache)* and cloud storage *(persistent cache)*
 
 
 ## Usage example
@@ -37,7 +37,7 @@ Duplicate parameters overwrite last values.
 | upscale | `upscale` | `upscale` | Image can be larger than original |
 
 There are special template string `original`. This will return optimized image with original dimensions.
-It is helpful to show image with maximal resolution without knowing its original dimension.
+It is helpful to show image with maximal resolution without knowing its dimension.
 
 When there are set both `height` and `width` then `ratio` parameter will be ignored.
 
@@ -46,7 +46,7 @@ If output image has a different ratio than an original, image will be centered o
 
 #### Examples
 
-> Values are for an image with dimension 200x400px.
+> Values are for an image with dimension 200x400px (width : height).
 
 | Template string | Output dimension |
 | :--- | :--- | 
@@ -111,7 +111,7 @@ If output image has a different ratio than an original, image will be centered o
 
 Image can be encoded to any supported format simple by changing file extension in URL.
 
-Original image extension is specified in `original` query param.
+Original image extension is specified in `original` query parameter.
 
 > This is typically used to encode image as web-friendly **webp** format
 ```

@@ -1,4 +1,4 @@
-package main
+package imageresizer
 
 import (
 	"fmt"
@@ -11,6 +11,11 @@ import (
 	"strconv"
 	"time"
 )
+
+type HttpError struct {
+	error
+	StatusCode int
+}
 
 func GetEnv(key string, fallback string) string {
 	if value, ok := os.LookupEnv(key); ok {
@@ -128,14 +133,14 @@ func CreateTempFileFromReader(c io.Reader, ext string) (f *os.File, err error) {
 	return
 }
 
-func ReplacePathExt(filepath string, r *http.Request) string {
+func ReplacePathExt(p string, r *http.Request) string {
 	ext := r.URL.Query().Get("original")
 
 	if ext == "" {
-		return filepath
+		return p
 	}
 
-	return filepath[0:len(filepath)-len(path.Ext(filepath))+1] + ext
+	return p[0:len(p)-len(path.Ext(p))+1] + ext
 }
 
 var verbose = GetEnvAsBool("VERBOSE", true)
