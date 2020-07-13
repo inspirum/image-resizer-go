@@ -146,7 +146,7 @@ By setting environment variable you can change default path to binary file or de
 
 #### Examples
 
-| 64 kB | 28 kB *(43 %)* | 23 kB *(5 %)* |
+| 64 kB | 28 kB *(43 %)* | 22 kB *(34 %)* |
 | :---: | :---: | :---: |
 | ![original](https://github.com/inspirum/assets/raw/master/image-resizer-go/img/optimize/jpg_optimized.jpg) | ![optimized](https://github.com/inspirum/assets/raw/master/image-resizer-go/img/optimize/jpg_optimized.jpg) | ![optimized](https://github.com/inspirum/assets/raw/master/image-resizer-go/img/optimize/jpg_optimized.webp) |
 
