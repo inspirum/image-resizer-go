@@ -7,7 +7,7 @@ RUN apk add --no-cache \
 
 WORKDIR /tmp/svgcleaner
 
-RUN curl -fsL "https://github.com/RazrFalcon/svgcleaner-gui/releases/download/v0.9.5/svgcleaner_linux_x86_64_0.9.5.tar.gz" | tar -xz \
+RUN curl -fsL "https://github.com/RazrFalcon/svgcleaner-gui/releases/download/v0.9.5/svgcleaner_linux_x86_64_0.9.5.tar.gz" | tar -x \
     && chmod +x svgcleaner \
     && mv svgcleaner /usr/bin/svgcleaner \
     && rm -rf /tmp/svgcleaner
