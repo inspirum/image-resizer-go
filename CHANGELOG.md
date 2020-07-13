@@ -9,11 +9,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## [Unreleased](https://github.com/inspirum/image-resizer-go/compare/v0.1.0...master)
 
 
+## v0.1.2 (2020-07-13)
+### Fixes
+- Fixes cloud file-cache
+
+
 ## v0.1.1 (2020-07-13)
 ### Fixes
-- Print error for resized image file-cache  
+- Prints error for resized image file-cache  
 
 
 ## v0.1.0 (2020-07-13)
 ### Added
-- Add basic functionality
+- Added basic functionality

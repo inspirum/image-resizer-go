@@ -16,6 +16,7 @@ import (
 type server struct {
 	router           *httprouter.Router
 	storage          imageresizer.Storage
+	localCache       bool
 	localCacheRoot   string
 	cloudCache       bool
 	cloudCacheRoot   string
@@ -36,6 +37,7 @@ func main() {
 	s := &server{
 		routerMux,
 		s3Service,
+		true,
 		imageresizer.GetEnv("STORAGE_LOCAL_PREFIX", "./cache/"),
 		imageresizer.GetEnvAsBool("STORAGE_CLOUD_ENABLED", true),
 		imageresizer.GetEnv("STORAGE_CLOUD_PREFIX", ""),
@@ -76,7 +78,6 @@ func (s *server) ServeFile(w http.ResponseWriter, r *http.Request, p httprouter.
 
 	originalFile, err := s.getOriginalImageFile(originalFilename)
 	if err != nil {
-		logger("Err: %v", err)
 		s.buildNotFoundResponse(w, r, template)
 		return
 	}
@@ -145,53 +146,67 @@ func (s *server) resizeImageFile(inputFilePath string, outputFilePath string, te
 	return os.Open(outputFilePath)
 }
 
-func (s *server) writeResizedImageFile(filePath string, content io.ReadSeeker, wg *sync.WaitGroup) {
-	logger("Write local resized image %s\n", s.getLocalResizedPath(filePath))
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		changed, err := imageresizer.WriteFileFromReader(s.getLocalResizedPath(filePath), content)
-		if err != nil {
-			logger(" - [async] Error local resized image %s: %v\n", s.getLocalResizedPath(filePath), err)
-		} else if changed {
-			logger(" - [async] Written local resized image %s\n", s.getLocalResizedPath(filePath))
-		} else {
-			logger(" - [async] Unchanged local resized image %s\n", s.getLocalResizedPath(filePath))
-		}
-	}()
+func (s *server) writeResizedImageFile(filePath string, outputFilePath string, wg *sync.WaitGroup) {
+	if s.localCache {
+		localResizedPath := s.getLocalResizedPath(outputFilePath)
+		logger("- [async] Write local resized image %s\n", localResizedPath)
+		wg.Add(1)
+		go func() {
+			time.Sleep(1)
+			defer wg.Done()
+			content, err := os.Open(filePath)
+			if err != nil {
+				logger("- [await] Error local resized image %s: %v\n", localResizedPath, err)
+			}
+			changed, err := imageresizer.WriteFileFromReader(localResizedPath, content)
+			_ = content.Close()
+			if err != nil {
+				logger("- [await] Error local resized image %s: %v\n", localResizedPath, err)
+			} else if changed {
+				logger("- [await] Written local resized image %s\n", localResizedPath)
+			} else {
+				logger("- [await] Unchanged local resized image %s\n", localResizedPath)
+			}
+		}()
+	}
 
 	if s.cloudCache {
-		logger("Write cloud resized image cloud://%s\n", s.getCloudResizedPath(filePath))
+		cloudResizedPath := s.getCloudResizedPath(outputFilePath)
+		logger("- [async] Write cloud resized image cloud://%s\n", cloudResizedPath)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			changed, err := s.storage.UploadContentReaderIfNewer(s.getCloudResizedPath(filePath), time.Now().Add(-1*time.Second*time.Duration(s.cacheMaxAge)), content)
+			content, err := os.Open(filePath)
 			if err != nil {
-				logger(" - [async] Error cloud resized image %s: %v\n", s.getCloudResizedPath(filePath), err)
+				logger("- [await] Error cloud resized image %s: %v\n", cloudResizedPath, err)
+			}
+			changed, err := s.storage.UploadContentReaderIfNewer(cloudResizedPath, time.Now().Add(-1*time.Second*time.Duration(s.cacheMaxAge)), content)
+			_ = content.Close()
+			if err != nil {
+				logger("- [await] Error cloud resized image %s: %v\n", cloudResizedPath, err)
 			} else if changed {
-				logger(" - [async] Written cloud resized image cloud://%s\n", s.getCloudResizedPath(filePath))
+				logger("- [await] Written cloud resized image cloud://%s\n", cloudResizedPath)
 			} else {
-				logger(" - [async] Unchanged cloud resized image cloud://%s\n", s.getCloudResizedPath(filePath))
+				logger("- [await] Unchanged cloud resized image cloud://%s\n", cloudResizedPath)
 			}
 		}()
 	}
 }
 
-func (s *server) buildResponse(w http.ResponseWriter, r *http.Request, content io.ReadSeeker, modTime time.Time, resizedFilePath string) {
+func (s *server) buildResponse(w http.ResponseWriter, r *http.Request, content *os.File, modTime time.Time, resizedFilePath string) {
 	var wg sync.WaitGroup
-	s.writeResizedImageFile(resizedFilePath, content, &wg)
 
 	w.Header().Set("Cache-Control", fmt.Sprintf("max-age=%d, public", s.cacheMaxAge))
 	http.ServeContent(w, r, resizedFilePath, modTime, content)
+	_ = content.Close()
+
+	s.writeResizedImageFile(content.Name(), resizedFilePath, &wg)
 
 	logger("== RESP %s == %d %s\n", time.Now().Format("15:04:05.000"), http.StatusOK, resizedFilePath)
 
 	go func() {
 		wg.Wait()
-		if f, ok := content.(io.Closer); ok {
-			_ = f.Close()
-		}
-		logger(" - [async] Finish response\n")
+		logger("- [await] Finish response\n")
 	}()
 }
 
