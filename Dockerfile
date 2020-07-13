@@ -43,6 +43,7 @@ WORKDIR /var/www/
 COPY --from=dependencies /tmp/build/out/resizer .
 RUN chmod +x /var/www/resizer
 
-EXPOSE 3000
+ENV PORT=3000
+EXPOSE $PORT
 
 CMD ["/var/www/resizer"]

@@ -1,5 +1,3 @@
-os: linux
-dist: trusty
 language: go
 fail_fast: true
 
