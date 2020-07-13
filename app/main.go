@@ -167,7 +167,7 @@ func (s *server) writeResizedImageFile(filePath string, content io.ReadSeeker, w
 			defer wg.Done()
 			changed, err := s.storage.UploadContentReaderIfNewer(s.getCloudResizedPath(filePath), time.Now().Add(-1*time.Second*time.Duration(s.cacheMaxAge)), content)
 			if err != nil {
-				logger(" - [async] Error cloud resized image %s: %v\n", s.getLocalResizedPath(filePath), err)
+				logger(" - [async] Error cloud resized image %s: %v\n", s.getCloudResizedPath(filePath), err)
 			} else if changed {
 				logger(" - [async] Written cloud resized image cloud://%s\n", s.getCloudResizedPath(filePath))
 			} else {
