@@ -45,6 +45,7 @@ COPY --from=dependencies /usr/bin/svgcleaner /usr/bin/svgcleaner
 WORKDIR /var/www/
 
 COPY --from=dependencies /tmp/build/out/resizer .
+COPY ./app/static .
 
 ENV PORT=3000
 EXPOSE $PORT
