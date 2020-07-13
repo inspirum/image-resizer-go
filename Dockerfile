@@ -1,5 +1,7 @@
 FROM golang:1.14-alpine AS dependencies
 
+LABEL MAINTAINER="Tomas Novotny <tomas.novotny@inspirum.cz>"
+
 RUN apk add --no-cache \
     git \
     curl \
@@ -21,9 +23,11 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o ./out/resizer .
+RUN go build -o ./out/resizer ./app
 
-FROM alpine
+FROM alpine as base
+
+LABEL MAINTAINER="Tomas Novotny <tomas.novotny@inspirum.cz>"
 
 ENV STORAGE_LOCAL_PREFIX=/var/www/cache/
 
@@ -41,7 +45,6 @@ COPY --from=dependencies /usr/bin/svgcleaner /usr/bin/svgcleaner
 WORKDIR /var/www/
 
 COPY --from=dependencies /tmp/build/out/resizer .
-RUN chmod +x /var/www/resizer
 
 ENV PORT=3000
 EXPOSE $PORT
