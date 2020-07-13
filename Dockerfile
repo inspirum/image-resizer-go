@@ -41,6 +41,7 @@ COPY --from=dependencies /usr/bin/svgcleaner /usr/bin/svgcleaner
 WORKDIR /var/www/
 
 COPY --from=dependencies /tmp/build/out/resizer .
+RUN chmod +x /var/www/resizer
 
 EXPOSE 3000
 
