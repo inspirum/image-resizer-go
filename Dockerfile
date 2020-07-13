@@ -49,4 +49,4 @@ COPY --from=dependencies /tmp/build/out/resizer .
 ENV PORT=3000
 EXPOSE $PORT
 
-CMD ["/var/www/resizer"]
+ENTRYPOINT "/var/www/resizer"
