@@ -150,8 +150,10 @@ func (s *server) writeResizedImageFile(filePath string, content io.ReadSeeker, w
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		changed, _ := imageresizer.WriteFileFromReader(s.getLocalResizedPath(filePath), content)
-		if changed {
+		changed, err := imageresizer.WriteFileFromReader(s.getLocalResizedPath(filePath), content)
+		if err != nil {
+			logger(" - [async] Error local resized image %s: %v\n", s.getLocalResizedPath(filePath), err)
+		} else if changed {
 			logger(" - [async] Written local resized image %s\n", s.getLocalResizedPath(filePath))
 		} else {
 			logger(" - [async] Unchanged local resized image %s\n", s.getLocalResizedPath(filePath))
@@ -163,8 +165,10 @@ func (s *server) writeResizedImageFile(filePath string, content io.ReadSeeker, w
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			changed, _ := s.storage.UploadContentReaderIfNewer(s.getCloudResizedPath(filePath), time.Now().Add(-1*time.Second*time.Duration(s.cacheMaxAge)), content)
-			if changed {
+			changed, err := s.storage.UploadContentReaderIfNewer(s.getCloudResizedPath(filePath), time.Now().Add(-1*time.Second*time.Duration(s.cacheMaxAge)), content)
+			if err != nil {
+				logger(" - [async] Error cloud resized image %s: %v\n", s.getLocalResizedPath(filePath), err)
+			} else if changed {
 				logger(" - [async] Written cloud resized image cloud://%s\n", s.getCloudResizedPath(filePath))
 			} else {
 				logger(" - [async] Unchanged cloud resized image cloud://%s\n", s.getCloudResizedPath(filePath))
