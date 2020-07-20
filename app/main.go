@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -226,12 +227,17 @@ func (s *server) buildNotFoundResponse(w http.ResponseWriter, r *http.Request, t
 
 	// TODO: add cache precondition
 	w.Header().Set("Cache-Control", "max-age=60, public")
-	w.WriteHeader(http.StatusNotFound)
+	statusCode, _ := strconv.Atoi(r.URL.Query().Get("status"))
+	if statusCode < 200 || statusCode >= 500 {
+		statusCode = http.StatusNotFound
+	}
+
+	w.WriteHeader(statusCode)
 	_, _ = io.Copy(w, resizedFile)
 
 	_ = resizedFile.Close()
 
-	logger("== RESP %s == %d %s\n", time.Now().Format("15:04:05.000"), http.StatusNotFound, resizedFile.Name())
+	logger("== RESP %s == %d %s\n", time.Now().Format("15:04:05.000"), statusCode, resizedFile.Name())
 }
 
 func (s *server) buildErrorResponse(w http.ResponseWriter, err error) {
