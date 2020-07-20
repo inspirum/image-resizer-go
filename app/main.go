@@ -102,11 +102,11 @@ func (s *server) getCloudResizedPath(path string) string {
 }
 
 func (s *server) getResizedImageFile(path string) (f *os.File, t *time.Time, err error) {
-	logger("Get local resized image %s\n", s.getLocalResizedPath(path))
+	vLogger("Get local resized image %s\n", s.getLocalResizedPath(path))
 	f, t, err = imageresizer.OpenFileWithModTime(s.getLocalResizedPath(path))
 
 	if err != nil && s.cloudCache {
-		logger("Get cloud resized image cloud://%s\n", s.getCloudResizedPath(path))
+		vLogger("Get cloud resized image cloud://%s\n", s.getCloudResizedPath(path))
 		f, t, err = s.storage.DownloadFileWithModTime(s.getCloudResizedPath(path), s.getLocalResizedPath(path))
 	}
 
@@ -114,19 +114,19 @@ func (s *server) getResizedImageFile(path string) (f *os.File, t *time.Time, err
 }
 
 func (s *server) getOriginalImageFile(path string) (*os.File, error) {
-	logger("Get original image cloud:/%s\n", path)
+	vLogger("Get original image cloud:/%s\n", path)
 	return s.storage.DownloadFile(path, "")
 }
 
 func (s *server) resizeImageFile(inputFilePath string, outputFilePath string, template string) (*os.File, error) {
 	if imageresizer.ShouldNotResize(template, inputFilePath) {
-		logger("Return original\n")
+		vLogger("Return original\n")
 		err := imageresizer.CopyFile(inputFilePath, outputFilePath)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		logger("Return resized\n")
+		vLogger("Return resized\n")
 		w, h, err := imageresizer.GetImageDimensions(inputFilePath)
 		if err != nil {
 			return nil, err
@@ -149,45 +149,45 @@ func (s *server) resizeImageFile(inputFilePath string, outputFilePath string, te
 func (s *server) writeResizedImageFile(filePath string, outputFilePath string, wg *sync.WaitGroup) {
 	if s.localCache {
 		localResizedPath := s.getLocalResizedPath(outputFilePath)
-		logger("- [async] Write local resized image %s\n", localResizedPath)
+		vLogger("- [async] Write local resized image %s\n", localResizedPath)
 		wg.Add(1)
 		go func() {
 			time.Sleep(1)
 			defer wg.Done()
 			content, err := os.Open(filePath)
 			if err != nil {
-				logger("- [await] Error local resized image %s: %v\n", localResizedPath, err)
+				vLogger("- [await] Error local resized image %s: %v\n", localResizedPath, err)
 			}
 			changed, err := imageresizer.WriteFileFromReader(localResizedPath, content)
 			_ = content.Close()
 			if err != nil {
-				logger("- [await] Error local resized image %s: %v\n", localResizedPath, err)
+				vLogger("- [await] Error local resized image %s: %v\n", localResizedPath, err)
 			} else if changed {
-				logger("- [await] Written local resized image %s\n", localResizedPath)
+				vLogger("- [await] Written local resized image %s\n", localResizedPath)
 			} else {
-				logger("- [await] Unchanged local resized image %s\n", localResizedPath)
+				vLogger("- [await] Unchanged local resized image %s\n", localResizedPath)
 			}
 		}()
 	}
 
 	if s.cloudCache {
 		cloudResizedPath := s.getCloudResizedPath(outputFilePath)
-		logger("- [async] Write cloud resized image cloud://%s\n", cloudResizedPath)
+		vLogger("- [async] Write cloud resized image cloud://%s\n", cloudResizedPath)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			content, err := os.Open(filePath)
 			if err != nil {
-				logger("- [await] Error cloud resized image %s: %v\n", cloudResizedPath, err)
+				vLogger("- [await] Error cloud resized image %s: %v\n", cloudResizedPath, err)
 			}
 			changed, err := s.storage.UploadContentReaderIfNewer(cloudResizedPath, time.Now().Add(-1*time.Second*time.Duration(s.cacheMaxAge)), content)
 			_ = content.Close()
 			if err != nil {
-				logger("- [await] Error cloud resized image %s: %v\n", cloudResizedPath, err)
+				vLogger("- [await] Error cloud resized image %s: %v\n", cloudResizedPath, err)
 			} else if changed {
-				logger("- [await] Written cloud resized image cloud://%s\n", cloudResizedPath)
+				vLogger("- [await] Written cloud resized image cloud://%s\n", cloudResizedPath)
 			} else {
-				logger("- [await] Unchanged cloud resized image cloud://%s\n", cloudResizedPath)
+				vLogger("- [await] Unchanged cloud resized image cloud://%s\n", cloudResizedPath)
 			}
 		}()
 	}
@@ -206,12 +206,12 @@ func (s *server) buildResponse(w http.ResponseWriter, r *http.Request, content *
 
 	go func() {
 		wg.Wait()
-		logger("- [await] Finish response\n")
+		vLogger("- [await] Finish response\n")
 	}()
 }
 
 func (s *server) buildNotFoundResponse(w http.ResponseWriter, r *http.Request, template string) {
-	logger("Return 404 response\n")
+	vLogger("Return 404 response\n")
 	resizedFilePath := template + "/" + filepath.Base(s.notFoundFilename)
 	resizedFile, _, err := s.getResizedImageFile(resizedFilePath)
 
@@ -248,8 +248,12 @@ func (s *server) buildErrorResponse(w http.ResponseWriter, err error) {
 
 var verbose = imageresizer.GetEnvAsBool("VERBOSE", true)
 
-func logger(format string, a ...interface{}) {
+func vLogger(format string, a ...interface{}) {
 	if verbose {
-		fmt.Printf(format, a...)
+		logger(format, a...)
 	}
+}
+
+func logger(format string, a ...interface{}) {
+	fmt.Printf(format, a...)
 }
