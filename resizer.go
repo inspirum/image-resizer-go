@@ -66,7 +66,9 @@ func NewTemplate(template string) *Template {
 
 	parts := strings.Split(template, "-")
 	for _, part := range parts {
-		if part[0] == 'w' {
+		if part == "" {
+			continue
+		} else if part[0] == 'w' {
 			width, _ = strconv.ParseFloat(part[1:], 64)
 		} else if part[0] == 'h' {
 			height, _ = strconv.ParseFloat(part[1:], 64)
