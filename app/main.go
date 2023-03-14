@@ -153,7 +153,7 @@ func (s *server) writeResizedImageFile(filePath string, outputFilePath string, w
 		vLogger("- [async] Write local resized image %s\n", localResizedPath)
 		wg.Add(1)
 		go func() {
-			time.Sleep(1)
+			time.Sleep(time.Duration(1))
 			defer wg.Done()
 			content, err := os.Open(filePath)
 			if err != nil {

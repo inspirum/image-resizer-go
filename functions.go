@@ -3,7 +3,6 @@ package imageresizer
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path"
@@ -116,7 +115,7 @@ func CopyFile(src, dst string) (err error) {
 }
 
 func CreateTempFileFromReader(c io.Reader, ext string) (f *os.File, err error) {
-	f, err = ioutil.TempFile("", "_resize_*"+ext)
+	f, err = os.CreateTemp("", "_resize_*"+ext)
 
 	if err != nil {
 		return

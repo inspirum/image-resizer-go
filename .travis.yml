@@ -2,7 +2,7 @@ language: go
 fail_fast: true
 
 go:
-  - "1.14"
+  - "1.20"
 
 jobs:
   include:

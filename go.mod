@@ -1,9 +1,11 @@
 module github.com/inspirum/image-resizer-go
 
-go 1.14
+go 1.20
 
 require (
-	github.com/aws/aws-sdk-go v1.33.5
+	github.com/aws/aws-sdk-go v1.44.220
 	github.com/julienschmidt/httprouter v1.3.0
-	golang.org/x/image v0.0.0-20200430140353-33d19683fad8
+	golang.org/x/image v0.6.0
 )
+
+require github.com/jmespath/go-jmespath v0.4.0 // indirect
