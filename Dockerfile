@@ -1,4 +1,4 @@
-FROM golang:1.14-alpine AS dependencies
+FROM golang:1.21-alpine AS dependencies
 
 LABEL MAINTAINER="Tomas Novotny <tomas.novotny@inspirum.cz>"
 

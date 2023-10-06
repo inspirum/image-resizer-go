@@ -17,11 +17,12 @@ type s3client struct {
 	bucket string
 }
 
-func NewS3Client(endpoint string, bucket string, key string, secret string, region string) *s3client {
+func NewS3Client(endpoint string, bucket string, key string, secret string, region string, pathStyle bool) *s3client {
 	s, err := session.NewSession(&aws.Config{
-		Endpoint:    aws.String(endpoint),
-		Region:      aws.String(region),
-		Credentials: credentials.NewStaticCredentials(key, secret, ""),
+		Endpoint:         aws.String(endpoint),
+		Region:           aws.String(region),
+		Credentials:      credentials.NewStaticCredentials(key, secret, ""),
+		S3ForcePathStyle: aws.Bool(pathStyle),
 	})
 
 	if err != nil {

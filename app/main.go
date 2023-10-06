@@ -33,6 +33,7 @@ func main() {
 		imageresizer.GetEnv("S3_KEY", ""),
 		imageresizer.GetEnv("S3_SECRET", ""),
 		imageresizer.GetEnv("S3_REGION", ""),
+		imageresizer.GetEnvAsBool("S3_USE_PATH_STYLE", false),
 	)
 
 	s := &server{
